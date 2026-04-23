@@ -7,3 +7,5 @@
 *.tiff
 *.jpg
 *.xlsx
+
+.DS_Store 
