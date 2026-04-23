@@ -1,0 +1,9 @@
+# any data files 
+*.csv
+*.mp4
+*.feather
+*.png
+*.tif
+*.tiff
+*.jpg
+*.xlsx
