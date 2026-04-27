@@ -417,6 +417,7 @@ class SleapVideoGUI:
         self.display_scale = 0.5
         self.reverse = tk.BooleanVar(value=False)
         self.show_seg_overlay = tk.BooleanVar(value=True)
+        self.add_point_mode = False
         self.direction = 1
         self._rebuild_state = None
         self.nav_stride = 1
@@ -548,6 +549,11 @@ class SleapVideoGUI:
             toolbar_bottom, text="Seg overlay", variable=self.show_seg_overlay,
             bg=self.bg, fg=self.fg, selectcolor=self.accent,
         ).pack(side=tk.LEFT, padx=6)
+        self.add_point_btn = tk.Button(
+            toolbar_bottom, text="+ Add Point", command=self._toggle_add_point_mode,
+            bg=self.bg, fg=self.fg,
+        )
+        self.add_point_btn.pack(side=tk.LEFT, padx=6)
 
         self.status = tk.Label(self.root, text="", anchor="w", bg=self.bg, fg=self.fg)
         self.status.pack(side=tk.TOP, fill=tk.X, padx=4, pady=(2, 4))
@@ -2177,10 +2183,38 @@ class SleapVideoGUI:
             self.root.after(60, self._next_frame)
         return True
 
+    def _toggle_add_point_mode(self):
+        self.add_point_mode = not self.add_point_mode
+        if self.add_point_mode:
+            self.add_point_btn.config(bg="#ff9f1a", fg="#1e1e1e")
+        else:
+            self.add_point_btn.config(bg=self.bg, fg=self.fg)
+
     def _on_click(self, event):
         if event.xdata is None or event.ydata is None:
             return
-        self._handle_click(event.xdata, event.ydata, allow_auto_run=True, allow_auto_advance=True, silent=False)
+        if self.add_point_mode:
+            self._handle_new_point(event.xdata, event.ydata)
+        else:
+            self._handle_click(event.xdata, event.ydata, allow_auto_run=True, allow_auto_advance=True, silent=False)
+
+    def _handle_new_point(self, x, y):
+        ts = self.tracks.get(self.active_track)
+        if ts is None:
+            return
+        self.manual_track.append({
+            "frame": int(self.frame_idx),
+            "x": float(x),
+            "y": float(y),
+            "node": "new_point",
+            "instance_id": None,
+            "track_id": int(self.active_track),
+            "source": "new",
+        })
+        self._mark_timeline_dirty()
+        self.last_click_frame = self.frame_idx
+        self.last_click_xy = (float(x), float(y))
+        self._render(do_auto=False)
 
     def _on_mouse_press(self, event):
         if event.inaxes != self.ax:
@@ -2522,6 +2556,30 @@ class SleapVideoGUI:
                             marker=marker,
                             alpha=0.9,
                             zorder=5,
+                        )
+            if self.manual_track:
+                for tid, ts in self.tracks.items():
+                    new_pts = [
+                        p for p in self.manual_track
+                        if int(p.get("frame")) == int(self.frame_idx)
+                        and int(p.get("track_id", 0)) == int(tid)
+                        and p.get("source") == "new"
+                    ]
+                    for p in new_pts:
+                        try:
+                            xp = float(p.get("x"))
+                            yp = float(p.get("y"))
+                        except (TypeError, ValueError):
+                            continue
+                        self.ax.scatter(
+                            [xp], [yp],
+                            s=90,
+                            c=ts.color,
+                            edgecolors="white",
+                            linewidths=1.2,
+                            marker="P",
+                            alpha=0.95,
+                            zorder=6,
                         )
             if frame is not None and self.show_seg_overlay.get():
                 self._draw_seg_overlays(frame, frame_df)
